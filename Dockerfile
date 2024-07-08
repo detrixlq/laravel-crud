@@ -1,25 +1,30 @@
-FROM php:8.1.2 as php
+FROM php:8.1-fpm as php
+
+ENV PHP_OPCACHE_ENABLE=0
+ENV PHP_OPCACHE_ENABLE_CLI=0
+ENV PHP_OPCACHE_VALIDATE_TIMESTAMPS=0
+ENV PHP_OPCACHE_REVALIDATE_FREQ=0
+
+RUN usermod -u 1000 www-data
 
 RUN apt-get update -y
-RUN apt-get install -y unzip libpq-dev libcurl4-gnutls-dev
-RUN docker-php-ext-install pdo_mysql bcmath
-
-RUN pecl install -o -f redis \
-    && rm -rf /tmp/pear \
-    && docker-php-ext-enable redis
+RUN apt-get install -y unzip libpq-dev libcurl4-gnutls-dev nginx
+RUN docker-php-ext-install pdo pdo_mysql bcmath curl opcache
 
 WORKDIR /var/www
-COPY . .
 
-COPY --from=composer:2.2.6 /usr/bin/composer /usr/bin/composer 
+COPY --chown=www-data . .
 
-ENV PORT=8000
-ENTRYPOINT [ "Docker/entrypoint.sh" ]
+COPY ./Docker/php/php.ini /usr/local/etc/php/php.ini
+COPY ./Docker/php/php-fpm.conf /usr/local/etc/php-fpm.d/www.conf
+COPY ./Docker/nginx/nginx.conf /etc/nginx/nginx.conf
 
-# ==============================================================================================================================================
-# node
+COPY --from=composer:2.3.5 /usr/bin/composer /usr/bin/composer
 
-FROM node:14-alpine as node
+RUN php artisan cache:clear
+RUN php artisan config:clear
 
-WORKDIR /var/www
-COPY . .
+RUN chmod -R 755 /var/www/storage
+RUN chmod -R 755 /var/www/bootstrap
+
+ENTRYPOINT [ "./Docker/entrypoint.sh" ]
